@@ -14,6 +14,12 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import java.security.MessageDigest
+import javax.crypto.KeyGenerator
+import java.security.SecureRandom
 
 const val BUFFER_SIZE = 990 // Adjust the buffer size as needed
 const val FILE_DELIMITER = "----FILE_DELIMITER----"
@@ -24,6 +30,24 @@ class BluetoothDataTransferService(
 ) {
 
     private val incomingDataStream = ByteArrayOutputStream()
+
+    // Generate AES key and IV
+    private val secretKey: ByteArray = generateKey()
+    private val iv: ByteArray = generateIv()
+
+    // Function to generate an AES key
+    private fun generateKey(): ByteArray {
+        val keyGen = KeyGenerator.getInstance("AES")
+        keyGen.init(256)
+        return keyGen.generateKey().encoded
+    }
+
+    // Function to generate an IV
+    private fun generateIv(): ByteArray {
+        val iv = ByteArray(16) // AES block size is 16 bytes
+        SecureRandom().nextBytes(iv)
+        return iv
+    }
 
     fun listenForIncomingMessages(viewModel: BluetoothViewModel): Flow<ByteArray> {
         return flow {
@@ -37,24 +61,19 @@ class BluetoothDataTransferService(
                 } catch (e: IOException) {
                     throw TransferFailedException()
                 }
-                var bufferRed = buffer.copyOfRange(0, byteCount)
+                val bufferRed = buffer.copyOfRange(0, byteCount)
                 Log.e("HELLOME", "Received: " + bufferRed.size.toString())
 
 //                processIncomingData(bufferRed)
 //                checkForFiles(viewModel)?.let { fileBytes ->
 //                    emit(fileBytes)
 //                }
-                Log.e("MYTAG", "Bytes Read : " + bufferRed.size)
+                // Decrypt the received data
+                val decryptedData = decryptData(bufferRed)
+                Log.e("MYTAG", "Bytes Read (Decrypted): " + decryptedData.size)
 
-                if(bufferRed.size == 880){
-                    viewModel?.isFirst = true
-                }else{
-                    emit(bufferRed)
-                }
-
-//                emit(
-//                    bufferRed
-//                )
+                // Emit the decrypted data
+                emit(decryptedData)
             }
         }.flowOn(Dispatchers.IO)
     }
@@ -65,7 +84,8 @@ class BluetoothDataTransferService(
 
     private fun checkForFiles(viewModel: BluetoothViewModel?): ByteArray? {
         val data = incomingDataStream.toByteArray()
-        val delimiterIndex = findIndexOfSubArray(incomingDataStream.toByteArray(), repeatedString.toByteArray())
+        val delimiterIndex =
+            findIndexOfSubArray(incomingDataStream.toByteArray(), repeatedString.toByteArray())
 
 
 //        Log.e("MYTAG","delimiter size" + FILE_DELIMITER.toByteArray().size.toString())
@@ -94,7 +114,7 @@ class BluetoothDataTransferService(
     }
 
     fun findIndexOfSubArray(mainArray: ByteArray, subArray: ByteArray): Int {
-        if(mainArray.size == repeatedString.toByteArray().size)
+        if (mainArray.size == repeatedString.toByteArray().size)
             return 0
 //        for (i in 0 until mainArray.size - subArray.size + 1) {
 //            if (mainArray.copyOfRange(i, i + subArray.size).contentEquals(subArray)) {
@@ -106,15 +126,50 @@ class BluetoothDataTransferService(
 
     suspend fun sendMessage(bytes: ByteArray): Boolean {
         return withContext(Dispatchers.IO) {
-        try {
-            socket.outputStream.write(bytes)
-            Log.e("HELLOME", "Sent: " + bytes.size.toString())
+            try {
+                val encryptedData = encryptData(bytes)
+                socket.outputStream.write(encryptedData)
+                Log.e("HELLOME", "Sent: " + bytes.size.toString())
 
-        } catch (e: IOException) {
+            } catch (e: IOException) {
                 return@withContext false
-        }
+            }
 
-        true
+            true
         }
+    }
+
+    // encrypts the provided data
+    private fun encryptData(data: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        val secretKeySpec = SecretKeySpec(secretKey, "AES")
+        val iv = ByteArray(16)
+        SecureRandom().nextBytes(iv)
+        val ivParameterSpec = IvParameterSpec(iv)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, ivParameterSpec)
+        return iv + cipher.doFinal(data)
+    }
+
+    // decrypts the provided data
+    private fun decryptData(data: ByteArray): ByteArray {
+        val iv = data.copyOfRange(0, 16)
+        val actualData = data.copyOfRange(16, data.size)
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        val secretKeySpec = SecretKeySpec(secretKey, "AES")
+        val ivParameterSpec = IvParameterSpec(iv)
+        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec)
+        return cipher.doFinal(actualData)
+    }
+
+    // generates a SHA-256 hash of the provided data
+    private fun generateHash(data: ByteArray): ByteArray {
+        val digest = MessageDigest.getInstance("SHA-256")
+        return digest.digest(data)
+    }
+
+    // verifying hash of the provided data matches the expectedHash
+    private fun verifyHash(data: ByteArray, expectedHash: ByteArray): Boolean {
+        val hash = generateHash(data)
+        return hash.contentEquals(expectedHash)
     }
 }
