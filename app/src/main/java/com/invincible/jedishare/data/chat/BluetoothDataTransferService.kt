@@ -6,6 +6,8 @@ import com.invincible.jedishare.domain.chat.BluetoothMessage
 import com.invincible.jedishare.domain.chat.TransferFailedException
 import com.invincible.jedishare.presentation.BluetoothViewModel
 import com.invincible.jedishare.presentation.components.CustomProgressIndicator
+import com.invincible.jedishare.utils.CryptoUtils
+import com.invincible.jedishare.utils.KeyUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -14,39 +16,41 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
-import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
-import java.security.MessageDigest
-import javax.crypto.KeyGenerator
-import java.security.SecureRandom
+import javax.crypto.SecretKey
+import java.security.KeyPair
+import java.security.PublicKey
 
 const val BUFFER_SIZE = 990 // Adjust the buffer size as needed
 const val FILE_DELIMITER = "----FILE_DELIMITER----"
 val repeatedString = FILE_DELIMITER.repeat(40)
 
 class BluetoothDataTransferService(
-    private val socket: BluetoothSocket
+    private val socket: BluetoothSocket,
+    private var aesKey: SecretKey? = null
 ) {
 
     private val incomingDataStream = ByteArrayOutputStream()
 
-    // Generate AES key and IV
-    private val secretKey: ByteArray = generateKey()
-    private val iv: ByteArray = generateIv()
-
-    // Function to generate an AES key
-    private fun generateKey(): ByteArray {
-        val keyGen = KeyGenerator.getInstance("AES")
-        keyGen.init(256)
-        return keyGen.generateKey().encoded
+    // Start the Diffie-Hellman Key Exchange
+    fun startKeyExchange(): ByteArray {
+        val keyPair: KeyPair = KeyUtils.generateDHKeyPair()
+        val publicKeyBytes = KeyUtils.serializePublicKey(keyPair.public)
+        // Send the public key bytes to the other device
+        // Store the private key for computing the shared secret later
+        dhPrivateKey = keyPair.private
+        return publicKeyBytes
     }
 
-    // Function to generate an IV
-    private fun generateIv(): ByteArray {
-        val iv = ByteArray(16) // AES block size is 16 bytes
-        SecureRandom().nextBytes(iv)
-        return iv
+    // Complete the Key Exchange and generate the AES key
+    fun completeKeyExchange(otherPublicKeyBytes: ByteArray) {
+        if (dhPrivateKey == null) {
+            Log.e("BluetoothDataTransfer", "Private key is null. Key exchange failed!")
+            throw IllegalStateException("Key exchange must be completed before data transfer.")
+        }
+
+        val otherPublicKey: PublicKey = KeyUtils.deserializePublicKey(otherPublicKeyBytes)
+        val sharedSecret: ByteArray = KeyUtils.generateSharedSecret(dhPrivateKey!!, otherPublicKey)
+        aesKey = KeyUtils.generateAESKeyFromSharedSecret(sharedSecret)
     }
 
     fun listenForIncomingMessages(viewModel: BluetoothViewModel): Flow<ByteArray> {
@@ -61,19 +65,36 @@ class BluetoothDataTransferService(
                 } catch (e: IOException) {
                     throw TransferFailedException()
                 }
-                val bufferRed = buffer.copyOfRange(0, byteCount)
-                Log.e("HELLOME", "Received: " + bufferRed.size.toString())
+                val encryptedChunk = buffer.copyOfRange(0, byteCount)
 
-//                processIncomingData(bufferRed)
-//                checkForFiles(viewModel)?.let { fileBytes ->
-//                    emit(fileBytes)
-//                }
-                // Decrypt the received data
-                val decryptedData = decryptData(bufferRed)
-                Log.e("MYTAG", "Bytes Read (Decrypted): " + decryptedData.size)
+                // Read the hash digest (for integrity check)
+                val hashBuffer = ByteArray(32) // SHA-256 produces a 32-byte hash
+                socket.inputStream.read(hashBuffer)
+                val receivedHash = hashBuffer.copyOfRange(0, hashBuffer.size)
 
-                // Emit the decrypted data
-                emit(decryptedData)
+                // Verify the hash to ensure data integrity
+                val computedHash = CryptoUtils.generateSHA256Hash(encryptedChunk)
+                if (!computedHash.contentEquals(receivedHash)) {
+                    throw TransferFailedException()
+                }
+
+                // Ensure AES key is ready before decrypting
+                if (aesKey == null) {
+                    throw TransferFailedException()
+                }
+
+                // Decrypt the chunk using AES
+                val decryptedData = CryptoUtils.decrypt(encryptedChunk, aesKey!!)
+
+                Log.e("BluetoothDataTransfer", "Received and decrypted: ${decryptedData.size} bytes")
+
+                processIncomingData(decryptedData)
+
+                if (decryptedData.size == 880) {
+                    viewModel?.isFirst = true
+                } else {
+                    emit(decryptedData)
+                }
             }
         }.flowOn(Dispatchers.IO)
     }
@@ -84,8 +105,7 @@ class BluetoothDataTransferService(
 
     private fun checkForFiles(viewModel: BluetoothViewModel?): ByteArray? {
         val data = incomingDataStream.toByteArray()
-        val delimiterIndex =
-            findIndexOfSubArray(incomingDataStream.toByteArray(), repeatedString.toByteArray())
+        val delimiterIndex = findIndexOfSubArray(incomingDataStream.toByteArray(), repeatedString.toByteArray())
 
 
 //        Log.e("MYTAG","delimiter size" + FILE_DELIMITER.toByteArray().size.toString())
@@ -114,7 +134,7 @@ class BluetoothDataTransferService(
     }
 
     fun findIndexOfSubArray(mainArray: ByteArray, subArray: ByteArray): Int {
-        if (mainArray.size == repeatedString.toByteArray().size)
+        if(mainArray.size == repeatedString.toByteArray().size)
             return 0
 //        for (i in 0 until mainArray.size - subArray.size + 1) {
 //            if (mainArray.copyOfRange(i, i + subArray.size).contentEquals(subArray)) {
@@ -127,9 +147,20 @@ class BluetoothDataTransferService(
     suspend fun sendMessage(bytes: ByteArray): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val encryptedData = encryptData(bytes)
+                // Encrypt the data chunk using AES
+                val encryptedData = CryptoUtils.encrypt(bytes, aesKey!!)
+
+                // Generate SHA-256 hash for integrity check
+                val hashDigest = CryptoUtils.generateSHA256Hash(encryptedData)
+
+                // Send the encrypted chunk
                 socket.outputStream.write(encryptedData)
-                Log.e("HELLOME", "Sent: " + bytes.size.toString())
+
+                // Send the hash digest for integrity verification
+                socket.outputStream.write(hashDigest)
+
+                Log.e("HELLOME", "Sent encrypted data: ${encryptedData.size} bytes")
+                Log.e("HELLOME", "Sent hash digest: ${hashDigest.size} bytes")
 
             } catch (e: IOException) {
                 return@withContext false
@@ -138,38 +169,5 @@ class BluetoothDataTransferService(
             true
         }
     }
-
-    // encrypts the provided data
-    private fun encryptData(data: ByteArray): ByteArray {
-        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-        val secretKeySpec = SecretKeySpec(secretKey, "AES")
-        val iv = ByteArray(16)
-        SecureRandom().nextBytes(iv)
-        val ivParameterSpec = IvParameterSpec(iv)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, ivParameterSpec)
-        return iv + cipher.doFinal(data)
-    }
-
-    // decrypts the provided data
-    private fun decryptData(data: ByteArray): ByteArray {
-        val iv = data.copyOfRange(0, 16)
-        val actualData = data.copyOfRange(16, data.size)
-        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-        val secretKeySpec = SecretKeySpec(secretKey, "AES")
-        val ivParameterSpec = IvParameterSpec(iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec)
-        return cipher.doFinal(actualData)
-    }
-
-    // generates a SHA-256 hash of the provided data
-    private fun generateHash(data: ByteArray): ByteArray {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(data)
-    }
-
-    // verifying hash of the provided data matches the expectedHash
-    private fun verifyHash(data: ByteArray, expectedHash: ByteArray): Boolean {
-        val hash = generateHash(data)
-        return hash.contentEquals(expectedHash)
-    }
+    private var dhPrivateKey: java.security.PrivateKey? = null
 }
