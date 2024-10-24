@@ -68,7 +68,7 @@ class BluetoothDataTransferService(
                 val encryptedChunk = buffer.copyOfRange(0, byteCount)
 
                 // Read the hash digest (for integrity check)
-                val hashBuffer = ByteArray(32) // SHA-256 produces a 32-byte hash
+                val hashBuffer = ByteArray(32)
                 socket.inputStream.read(hashBuffer)
                 val receivedHash = hashBuffer.copyOfRange(0, hashBuffer.size)
 
@@ -103,50 +103,49 @@ class BluetoothDataTransferService(
         incomingDataStream.write(data)
     }
 
+
     private fun checkForFiles(viewModel: BluetoothViewModel?): ByteArray? {
         val data = incomingDataStream.toByteArray()
-        val delimiterIndex = findIndexOfSubArray(incomingDataStream.toByteArray(), repeatedString.toByteArray())
+        val delimiterIndex = findIndexOfSubArray(data, repeatedString.toByteArray())
 
-
-//        Log.e("MYTAG","delimiter size" + FILE_DELIMITER.toByteArray().size.toString())
-//        Log.e("MYTAG","byte array size" + data.size)
-
-//        val delimiterIndex = data.indexOf(FILE_DELIMITER.toByteArray())
-        if (delimiterIndex == 0) {
-//            val fileBytes = data.copyOfRange(0, delimiterIndex)
-//            incomingDataStream.reset()
-//            Log.e("MYTAG","END OF FILE" + delimiterIndex)
-//            Log.e("MYTAG","main array size" + incomingDataStream.toByteArray().size.toString())
-//            Log.e("MYTAG","delimiter size" + repeatedString.toByteArray().size.toString())
+        if (delimiterIndex >= 0) {
+            // File boundary found, extract the file data
+            val fileBytes = data.copyOfRange(0, delimiterIndex)
+            incomingDataStream.reset()  // Reset the stream after processing the file
+            // Write the remaining bytes back into the stream (after the delimiter)
+            if (delimiterIndex + repeatedString.toByteArray().size < data.size) {
+                incomingDataStream.write(
+                    data,
+                    delimiterIndex + repeatedString.toByteArray().size,
+                    data.size - (delimiterIndex + repeatedString.toByteArray().size)
+                )
+            }
             viewModel?.isFirst = true
-//            incomingDataStream.write(data, delimiterIndex + FILE_DELIMITER.length, data.size - (delimiterIndex + FILE_DELIMITER.length))
-//            return fileBytes
-            incomingDataStream.reset()
-            return null
-//            return incomingDataStream.toByteArray()
+            return fileBytes
         }
-//        else if(viewModel?.isFirst == true && data.size == 990){
-//            incomingDataStream.reset()
-//            return null
-//        }
+
         incomingDataStream.reset()
-        return data
+        return null
     }
 
     fun findIndexOfSubArray(mainArray: ByteArray, subArray: ByteArray): Int {
-        if(mainArray.size == repeatedString.toByteArray().size)
-            return 0
-//        for (i in 0 until mainArray.size - subArray.size + 1) {
-//            if (mainArray.copyOfRange(i, i + subArray.size).contentEquals(subArray)) {
-//                return i
-//            }
-//        }
-        return -1 // Return -1 if subArray is not found in mainArray
+        // Properly find the delimiter in the incoming data
+        for (i in 0 until mainArray.size - subArray.size + 1) {
+            if (mainArray.copyOfRange(i, i + subArray.size).contentEquals(subArray)) {
+                return i
+            }
+        }
+        return -1 // Return -1 if subArray is not found
     }
 
     suspend fun sendMessage(bytes: ByteArray): Boolean {
         return withContext(Dispatchers.IO) {
             try {
+                // Ensure AES key is ready before encrypting
+                if (aesKey == null) {
+                    throw IllegalStateException("AES key not initialized!")
+                }
+
                 // Encrypt the data chunk using AES
                 val encryptedData = CryptoUtils.encrypt(bytes, aesKey!!)
 
