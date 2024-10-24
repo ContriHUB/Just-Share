@@ -10,4 +10,10 @@
     <color name="background">#FF0000</color>
     <color name="MyRed">#FFec1c22</color>
     <color name="myRedSecondary">#FFf2cdce</color>
+
+    <color name="dark_background">#121212</color>
+    <color name="dark_surface">#1E1E1E</color>
+    <color name="dark_primary">#BB86FC</color>
+    <color name="dark_primaryVariant">#3700B3</color>
+    <color name="dark_secondary">#03DAC6</color>
 </resources>
