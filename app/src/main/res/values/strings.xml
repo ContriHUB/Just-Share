@@ -10,4 +10,13 @@
     <string name="title_activity_history">HistoryActivity</string>
 
     <string name="title_activity_wifi_direct_device_select">WifiDirectDeviceSelectActivity</string>
+    <string name="settings_title">Settings</string>
+    <string name="theme_selection">Select Theme</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="light_mode">Light Mode</string>
+    <string name="default_storage_location">Default Storage Location</string>
+    <string name="default_file_transfer_mode">Default File Transfer Mode</string>
+    <string name="bluetooth">Bluetooth</string>
+    <string name="wifi_direct">Wifi Direct</string>
+    <string name="save">Save</string>
 </resources>

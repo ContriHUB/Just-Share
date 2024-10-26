@@ -16,6 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.invincible.jedishare.ui.theme.JediShareTheme
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -25,7 +29,8 @@ class Waiting : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            JediShareTheme {
+            var darkTheme by remember { mutableStateOf(false) }
+            JediShareTheme(darkTheme = darkTheme) {
                 var temp = intent.getStringExtra("Data")
                 Column (
                     modifier = Modifier

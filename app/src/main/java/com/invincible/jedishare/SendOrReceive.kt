@@ -20,13 +20,18 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.invincible.jedishare.ui.theme.JediShareTheme
 
 class SendOrReceive : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            JediShareTheme {
+            var darkTheme by remember { mutableStateOf(false) }
+            JediShareTheme(darkTheme = darkTheme) {
                 val data = intent.getStringExtra("Data")
 
                 Text(text = data?:"")
