@@ -22,6 +22,10 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +50,8 @@ class WelcomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            JediShareTheme {
+            var darkTheme by remember { mutableStateOf(false) }
+            JediShareTheme(darkTheme = darkTheme) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -118,16 +123,16 @@ class WelcomeActivity : ComponentActivity() {
 //                            text = "Jedi Share is the ultimate file sharing app, designed to make sharing files a breeze.",
 //                            textAlign = TextAlign.Center,
 //                            style = MaterialTheme.tyopography.h6)
-                        
+
 
                         Button(
-                                onClick = {
-                                    val intent = Intent(this@WelcomeActivity, MainActivity::class.java)
-                                    startActivity(intent)
-                                },
-                        modifier = Modifier
-                            .padding(20.dp)
-                            .fillMaxWidth(),
+                            onClick = {
+                                val intent = Intent(this@WelcomeActivity, MainActivity::class.java)
+                                startActivity(intent)
+                            },
+                            modifier = Modifier
+                                .padding(20.dp)
+                                .fillMaxWidth(),
                             shape = RoundedCornerShape(50),
                             colors = ButtonDefaults.buttonColors(backgroundColor = Color(0xFFec1c22)),
                         ) {

@@ -284,8 +284,8 @@ class SelectFile : ComponentActivity() {
         }
 
         setContent {
-            var bitmapState by remember { mutableStateOf<Bitmap?>(null) }
-            JediShareTheme {
+            var darkTheme by remember { mutableStateOf(false) }
+            JediShareTheme(darkTheme = darkTheme) {
                 val context = LocalContext.current
 
                 Box(
@@ -409,8 +409,8 @@ class SelectFile : ComponentActivity() {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth(),
-                                        verticalArrangement = Arrangement.Bottom,
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    verticalArrangement = Arrangement.Bottom,
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
 
                                     Spacer(modifier = Modifier.size(12.dp))
@@ -554,7 +554,7 @@ class SelectFile : ComponentActivity() {
                                                                         indication = null,
                                                                         interactionSource = interactionSource
                                                                     ) {
-                                                                               expanded = !expanded
+                                                                        expanded = !expanded
                                                                     },
                                                                 maxLines = if(expanded) 10 else 2
 //                                                            .padding(16.dp) // Adjust padding as needed
@@ -735,12 +735,12 @@ fun dropDownMenu(data: ActivityResultLauncher<String>) {
             ){
                 Icon(
                     modifier = Modifier
-                            .size(60.dp)
-                        ,
-                        imageVector = Icons.Default.AddCircle,
-                        contentDescription = null,
-                        tint = MyRed,
-                    )
+                        .size(60.dp)
+                    ,
+                    imageVector = Icons.Default.AddCircle,
+                    contentDescription = null,
+                    tint = MyRed,
+                )
                 Text(
                     text = "Upload Files",
                     style = MaterialTheme.typography.h5,
@@ -793,7 +793,7 @@ fun AnimatedPreloader(modifier: Modifier = Modifier, drawable: Int, iterations: 
         iterations = iterations,
         isPlaying = true,
 
-    )
+        )
     LottieAnimation(
         composition = preloaderLottieComposition,
         progress = preloaderProgress,
@@ -869,7 +869,7 @@ fun TextWithBorder(text: String, borderColor: Color, borderWidth: Int, textColor
 @Composable
 fun CustomButton(buttonText: String, onClickAction: () -> Unit) {
     Button(onClick = {
-                     onClickAction.invoke()
+        onClickAction.invoke()
     },
         //colors = ButtonDefaults.buttonColors(backgroundColor = Color.DarkGray),
         shape = RoundedCornerShape(20.dp),

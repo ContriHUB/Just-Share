@@ -204,7 +204,8 @@ class MainActivity : ComponentActivity() {
 
 
         setContent {
-            JediShareTheme {
+    var darkTheme by remember { mutableStateOf(false) }
+    JediShareTheme(darkTheme = darkTheme) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

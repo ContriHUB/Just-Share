@@ -39,7 +39,8 @@ class Progress : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            JediShareTheme {
+            var darkTheme by remember { mutableStateOf(false) }
+            JediShareTheme(darkTheme = darkTheme) {
 
                 val data = intent.getStringExtra("transferMethod")
                 if (data != null) {
